@@ -88,8 +88,8 @@ export default function App() {
   const [organicUrls, setOrganicUrls] = useState(['', '', '', '']);
   const [keywords, setKeywords] = useState('');
   const [enableKeywords, setEnableKeywords] = useState(false);
-  const [visits, setVisits] = useState(10);
-  const [duration, setDuration] = useState(2); // Default 2 minutes
+  const [visits, setVisits] = useState(1000);
+  const [minPerVisit, setMinPerVisit] = useState(1);
   const [headless, setHeadless] = useState(true);
   const [useProxies, setUseProxies] = useState(false);
   const [smartAI, setSmartAI] = useState(true);
@@ -186,7 +186,7 @@ export default function App() {
         url,
         trafficType,
         visits,
-        duration,
+        minPerVisit,
         headless,
         useProxies,
         smartAI,
@@ -203,8 +203,8 @@ export default function App() {
   const loadConfig = (config: any) => {
     setUrl(config.url || '');
     setTrafficType(config.trafficType || 'direct');
-    setVisits(config.visits || 10);
-    setDuration(config.duration || 2);
+    setVisits(config.visits || 1000);
+    setMinPerVisit(config.minPerVisit || 1);
     setHeadless(config.headless !== undefined ? config.headless : true);
     setUseProxies(config.useProxies || false);
     setSmartAI(config.smartAI !== undefined ? config.smartAI : true);
@@ -497,7 +497,7 @@ export default function App() {
         body: JSON.stringify({
           url,
           visits,
-          waitTime: duration * 60000,
+          minPerVisit,
           headless,
           useProxies,
           keywords: enableKeywords ? keywords.split(',').map(k => k.trim()) : [],
@@ -785,10 +785,10 @@ export default function App() {
               </div>
             </div>
             
-            <div className="p-5 space-y-5">
+            <div className="p-5 space-y-6">
               {/* URL Input */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Target URL</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Target URL</label>
                 <div className="relative group">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                   <input
@@ -797,19 +797,19 @@ export default function App() {
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://example.com"
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   />
                 </div>
               </div>
 
               {/* Traffic Control */}
               <div className="space-y-3">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Traffic Mode</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Traffic Mode</label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800">
                   <button
                     onClick={() => setTrafficType('direct')}
                     disabled={isRunning}
-                    className={`py-2 px-4 rounded-lg text-xs font-medium transition-all ${
+                    className={`py-2.5 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
                       trafficType === 'direct' 
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
                         : 'text-slate-500 hover:text-slate-300'
@@ -820,7 +820,7 @@ export default function App() {
                   <button
                     onClick={() => setTrafficType('organic')}
                     disabled={isRunning}
-                    className={`py-2 px-4 rounded-lg text-xs font-medium transition-all ${
+                    className={`py-2.5 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
                       trafficType === 'organic' 
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
                         : 'text-slate-500 hover:text-slate-300'
@@ -853,150 +853,129 @@ export default function App() {
                             disabled={isRunning}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-all"
                           />
-                          <p className="text-[10px] text-indigo-400/70 italic">* Bot will search for these on Google to find your site</p>
                         </div>
                       )}
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Referral URLs (Optional)</label>
-                      <div className="space-y-2">
-                        {organicUrls.map((u, idx) => (
-                          <input
-                            key={idx}
-                            type="url"
-                            value={u}
-                            onChange={(e) => {
-                              const newUrls = [...organicUrls];
-                              newUrls[idx] = e.target.value;
-                              setOrganicUrls(newUrls);
-                            }}
-                            placeholder={`Referrer URL ${idx + 1}`}
-                            disabled={isRunning}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-all"
-                          />
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-indigo-400/70 italic">* Bot will visit these URLs randomly to simulate organic referral traffic</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Stats Grid */}
+              {/* Visits & Min Per Visit */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Visits</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Visits</label>
                   <input
                     type="number"
                     value={visits}
-                    onChange={(e) => setVisits(parseInt(e.target.value) || 1)}
-                    min="1"
+                    onChange={(e) => setVisits(parseInt(e.target.value) || 0)}
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Min Per Visit</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Min Per Visit</label>
                   <input
                     type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value) || 1)}
-                    min="1"
+                    value={minPerVisit}
+                    onChange={(e) => setMinPerVisit(parseInt(e.target.value) || 0)}
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   />
                 </div>
               </div>
 
               {/* Toggles */}
               <div className="space-y-3 pt-2">
-                <label className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:bg-slate-900/50 transition-colors">
+                <div 
+                  onClick={() => !isRunning && setSmartAI(!smartAI)}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                    smartAI ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <Activity className="w-4 h-4 text-indigo-400" />
-                    <span className="text-sm font-medium text-slate-300">Smart AI Behavior</span>
+                    <Activity className={`w-4 h-4 ${smartAI ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <span className={`text-xs font-bold uppercase tracking-wider ${smartAI ? 'text-white' : 'text-slate-500'}`}>Smart AI Behavior</span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={smartAI}
-                    onChange={(e) => setSmartAI(e.target.checked)}
-                    disabled={isRunning}
-                    className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
-                  />
-                </label>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${smartAI ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
+                    {smartAI && <CheckCircle2 className="w-3 h-3 text-white" />}
+                  </div>
+                </div>
 
-                <label className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:bg-slate-900/50 transition-colors">
+                <div 
+                  onClick={() => !isRunning && setHeadless(!headless)}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                    headless ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <Terminal className="w-4 h-4 text-indigo-400" />
-                    <span className="text-sm font-medium text-slate-300">Headless Mode</span>
+                    <Terminal className={`w-4 h-4 ${headless ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <span className={`text-xs font-bold uppercase tracking-wider ${headless ? 'text-white' : 'text-slate-500'}`}>Headless Mode</span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={headless}
-                    onChange={(e) => setHeadless(e.target.checked)}
-                    disabled={isRunning}
-                    className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
-                  />
-                </label>
-              </div>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${headless ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
+                    {headless && <CheckCircle2 className="w-3 h-3 text-white" />}
+                  </div>
+                </div>
 
-              {/* Proxy Section */}
-              <div className="pt-2">
-                <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-indigo-400" />
-                      <span className="text-sm font-semibold text-indigo-100">Proxy Management</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={useProxies}
-                      onChange={(e) => setUseProxies(e.target.checked)}
-                      disabled={isRunning}
-                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
-                    />
-                  </div>
-                  
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isRunning}
-                    className="w-full py-2 px-4 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-xs font-medium text-indigo-400 hover:bg-indigo-600/20 transition-all flex items-center justify-center gap-2"
+                <div className="space-y-3">
+                  <div 
+                    onClick={() => !isRunning && setUseProxies(!useProxies)}
+                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                      useProxies ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
+                    }`}
                   >
-                    Upload Proxy List (.txt)
-                  </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleProxyUpload}
-                    accept=".txt"
-                    className="hidden"
-                  />
-                  <p className="text-[10px] text-indigo-400/60 text-center">Format: IP:PORT:USER:PASS or IP:PORT</p>
+                    <div className="flex items-center gap-3">
+                      <Globe className={`w-4 h-4 ${useProxies ? 'text-indigo-400' : 'text-slate-500'}`} />
+                      <span className={`text-xs font-bold uppercase tracking-wider ${useProxies ? 'text-white' : 'text-slate-500'}`}>Proxy Management</span>
+                    </div>
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${useProxies ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
+                      {useProxies && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+
+                  {useProxies && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl"
+                    >
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold py-3 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all"
+                      >
+                        Upload Proxy List (.txt)
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleProxyUpload}
+                        accept=".txt"
+                        className="hidden"
+                      />
+                      <p className="text-[9px] text-slate-500 text-center uppercase tracking-widest">Format: IP:PORT:USER:PASS or IP:PORT</p>
+                    </motion.div>
+                  )}
                 </div>
               </div>
 
               {/* Action Button */}
               <div className="pt-4">
-                <button
-                  onClick={isRunning ? handleStop : handleStart}
-                  className={`w-full py-4 rounded-xl font-bold text-sm tracking-wide transition-all flex items-center justify-center gap-3 shadow-lg ${
-                    isRunning 
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20' 
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
-                  }`}
-                >
-                  {isRunning ? (
-                    <>
-                      <Square className="w-4 h-4 fill-current" />
-                      STOP ENGINE
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-current" />
-                      START ENGINE
-                    </>
-                  )}
-                </button>
+                {isRunning ? (
+                  <button
+                    onClick={handleStop}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-black py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-rose-600/20 uppercase tracking-widest"
+                  >
+                    <Square className="w-5 h-5 fill-white" />
+                    Stop Engine
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStart}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest"
+                  >
+                    <Play className="w-5 h-5 fill-white" />
+                    Start Engine
+                  </button>
+                )}
                 {error && (
                   <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-400 text-xs">
                     <AlertCircle className="w-4 h-4 shrink-0" />
