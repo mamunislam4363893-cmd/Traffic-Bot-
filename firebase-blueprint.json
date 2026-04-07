@@ -1,83 +1,40 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "User settings and profile",
+    "Session": {
+      "title": "User Bot Session",
+      "description": "Stores the current status and configuration of a user's bot.",
       "type": "object",
       "properties": {
-        "apiKeys": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "List of Gemini API keys"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "uid": { "type": "string", "description": "The user's unique ID." },
+        "isRunning": { "type": "boolean", "description": "Whether the bot is currently running." },
+        "url": { "type": "string", "description": "The target URL." },
+        "visits": { "type": "number", "description": "Target number of visits." },
+        "proxyCount": { "type": "number", "description": "Number of proxies loaded." },
+        "screenshot": { "type": "string", "description": "Base64 encoded screenshot of the current page." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp." }
       },
-      "required": ["apiKeys"]
+      "required": ["uid", "isRunning"]
     },
-    "BotConfig": {
-      "title": "Bot Configuration",
-      "description": "Saved settings for a traffic bot run",
+    "Log": {
+      "title": "Bot Log",
+      "description": "A single log entry for a user's bot.",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "url": { "type": "string" },
-        "trafficType": { "type": "string", "enum": ["direct", "organic"] },
-        "visits": { "type": "number" },
-        "duration": { "type": "number" },
-        "headless": { "type": "boolean" },
-        "useProxies": { "type": "boolean" },
-        "smartAI": { "type": "boolean" },
-        "keywords": { "type": "string" },
-        "organicUrls": { "type": "array", "items": { "type": "string" } },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "uid": { "type": "string", "description": "The user's unique ID." },
+        "message": { "type": "string", "description": "The log message." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the log was created." }
       },
-      "required": ["name", "url", "trafficType", "visits"]
-    },
-    "BotSession": {
-      "title": "Bot Session",
-      "description": "Execution state of a bot run",
-      "type": "object",
-      "properties": {
-        "status": { "type": "string", "enum": ["running", "completed", "stopped", "error"] },
-        "currentVisit": { "type": "number" },
-        "totalVisits": { "type": "number" },
-        "startTime": { "type": "string", "format": "date-time" },
-        "endTime": { "type": "string", "format": "date-time" },
-        "config": { "$ref": "BotConfig" }
-      },
-      "required": ["status", "currentVisit", "totalVisits", "startTime"]
-    },
-    "LogEntry": {
-      "title": "Log Entry",
-      "description": "A single log message from the bot",
-      "type": "object",
-      "properties": {
-        "timestamp": { "type": "string", "format": "date-time" },
-        "message": { "type": "string" },
-        "type": { "type": "string", "enum": ["info", "warning", "error", "success"] }
-      },
-      "required": ["timestamp", "message"]
+      "required": ["uid", "message", "timestamp"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "User profile and settings"
+    "/sessions/{uid}": {
+      "schema": "Session",
+      "description": "Current session state for a specific user."
     },
-    "/users/{userId}/configs/{configId}": {
-      "schema": "BotConfig",
-      "description": "Saved bot configurations"
-    },
-    "/users/{userId}/sessions/{sessionId}": {
-      "schema": "BotSession",
-      "description": "Bot execution sessions"
-    },
-    "/users/{userId}/sessions/{sessionId}/logs/{logId}": {
-      "schema": "LogEntry",
-      "description": "Logs for a specific session"
+    "/logs/{logId}": {
+      "schema": "Log",
+      "description": "Historical logs for all users, filtered by UID."
     }
   }
 }

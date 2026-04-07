@@ -191,7 +191,7 @@ async function startServer() {
     const {
       url,
       visits = 1,
-      minPerVisit = 1,
+      waitTime = 5000,
       headless = true,
       useProxies = false,
       keywords = [],
@@ -212,11 +212,9 @@ async function startServer() {
     session.logs = [];
     session.popupCloseCount = 0;
     addLog(uid, `Starting ${trafficType.toUpperCase()} traffic bot for: ${url}`);
-    addLog(uid, `Config: ${visits} visits, min ${minPerVisit}m per visit, headless: ${headless}`);
 
     (async () => {
       try {
-        const waitTime = minPerVisit * 60000;
         for (let i = 0; i < visits; i++) {
           if (!session.isRunning) break;
           broadcastProgress(uid, i + 1, visits);
@@ -258,22 +256,16 @@ async function startServer() {
               }
             }
             launchArgs.push(`--proxy-server=${currentProxy}`);
-            addLog(uid, `Using Proxy: ${currentProxy}`);
           }
 
           try {
-            addLog(uid, "Initializing browser engine...");
             session.browser = await puppeteer.launch({
-              headless: headless === true || headless === 'true',
+              headless: true,
               args: [
                 ...launchArgs,
                 `--window-size=${randomViewport.width},${randomViewport.height}`,
                 '--disable-web-security',
                 '--allow-running-insecure-content',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions',
-                '--mute-audio',
               ],
             }) as any;
           } catch (launchErr: any) {
@@ -356,7 +348,6 @@ async function startServer() {
 
             addLog(uid, `Navigating to: ${currentTargetUrl}`);
             await page.goto(currentTargetUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-            await captureAndBroadcast(); // Send first frame immediately after load
             
             // Add a random initial delay to look more human
             const initialDelay = 3000 + Math.random() * 5000;
@@ -679,7 +670,7 @@ async function startServer() {
 
             runCycle();
 
-            while (session.isRunning && (Date.now() - stepStartTime < waitTime)) {
+            while (session.isRunning && (Date.now() - stepStartTime < cycleDuration)) {
               await new Promise(r => setTimeout(r, 1000));
               if (Math.random() > 0.8) await captureAndBroadcast(); // Extra updates
             }
@@ -695,12 +686,15 @@ async function startServer() {
           session.currentScreenshot = null;
           broadcastFrame(uid, '', randomViewport.width, randomViewport.height);
           const interVisitDelay = 3000 + Math.random() * 5000;
+          addLog(uid, `Success: Visit #${i + 1}/${visits} completed successfully!`);
           broadcastProgress(uid, i + 1, visits); // Update progress after completion
+          addLog(uid, `Waiting ${Math.round(interVisitDelay/1000)}s before next visit...`);
           await new Promise(r => setTimeout(r, interVisitDelay)); 
         }
       } catch (err: any) {
         addLog(uid, `Error: ${err.message}`);
       } finally {
+        addLog(uid, `Success: All ${visits} visits completed successfully!`);
         session.isRunning = false;
         session.currentScreenshot = null;
         if (session.browser) {

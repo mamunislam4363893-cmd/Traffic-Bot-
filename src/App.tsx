@@ -1,72 +1,7 @@
-import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
-import { Play, Square, Loader2, Globe, Settings, Terminal, Activity, CheckCircle2, AlertCircle, Zap, Trash2, Plus, LogIn, LogOut, Save, FolderOpen } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Square, Loader2, Globe, Settings, Terminal, Activity, CheckCircle2, AlertCircle, Zap, Trash2, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { auth, db, signInWithGoogle, logout, handleFirestoreError, OperationType } from './firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, getDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, Timestamp, deleteDoc } from 'firebase/firestore';
-
-// Error Boundary Component
-interface ErrorBoundaryProps {
-  children: ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
-
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
-  }
-
-  render() {
-    const { hasError, error } = this.state;
-    const { children } = (this as any).props;
-
-    if (hasError) {
-      let errorMessage = "Something went wrong.";
-      try {
-        const parsed = JSON.parse(error?.message || "");
-        if (parsed.error) errorMessage = `Firestore Error: ${parsed.error} (${parsed.operationType} at ${parsed.path})`;
-      } catch (e) {
-        errorMessage = error?.message || errorMessage;
-      }
-
-      return (
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-red-500/50 rounded-xl p-8 max-w-md w-full text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Application Error</h2>
-            <p className="text-slate-300 mb-6">{errorMessage}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg transition-colors"
-            >
-              Reload Application
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return children;
-  }
-}
 
 // Generate a simple unique ID for the session if not exists
 const getSessionId = () => {
@@ -81,15 +16,13 @@ const getSessionId = () => {
 const SESSION_ID = getSessionId();
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const [url, setUrl] = useState('');
   const [trafficType, setTrafficType] = useState<'direct' | 'organic'>('direct');
   const [organicUrls, setOrganicUrls] = useState(['', '', '', '']);
   const [keywords, setKeywords] = useState('');
   const [enableKeywords, setEnableKeywords] = useState(false);
-  const [visits, setVisits] = useState(1000);
-  const [minPerVisit, setMinPerVisit] = useState(1);
+  const [visits, setVisits] = useState(10);
+  const [duration, setDuration] = useState(2); // Default 2 minutes
   const [headless, setHeadless] = useState(true);
   const [useProxies, setUseProxies] = useState(false);
   const [smartAI, setSmartAI] = useState(true);
@@ -113,117 +46,8 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [ws, setWs] = useState<WebSocket | null>(null);
-  const [savedConfigs, setSavedConfigs] = useState<any[]>([]);
-  const [showConfigModal, setShowConfigModal] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAuthReady(true);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Load user settings (API keys) from Firestore
-  useEffect(() => {
-    if (!user) {
-      setApiKeys([]);
-      return;
-    }
-
-    const userDocRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.apiKeys) {
-          setApiKeys(data.apiKeys);
-        }
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Load saved configs from Firestore
-  useEffect(() => {
-    if (!user) {
-      setSavedConfigs([]);
-      return;
-    }
-
-    const configsRef = collection(db, 'users', user.uid, 'configs');
-    const q = query(configsRef, orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const configs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setSavedConfigs(configs);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/configs`);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const saveApiKeyToFirestore = async (newKeys: string[]) => {
-    if (!user) return;
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        apiKeys: newKeys,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
-    }
-  };
-
-  const saveConfig = async (name: string) => {
-    if (!user) return;
-    try {
-      await addDoc(collection(db, 'users', user.uid, 'configs'), {
-        name,
-        url,
-        trafficType,
-        visits,
-        minPerVisit,
-        headless,
-        useProxies,
-        smartAI,
-        keywords,
-        organicUrls,
-        createdAt: serverTimestamp()
-      });
-      setShowConfigModal(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/configs`);
-    }
-  };
-
-  const loadConfig = (config: any) => {
-    setUrl(config.url || '');
-    setTrafficType(config.trafficType || 'direct');
-    setVisits(config.visits || 1000);
-    setMinPerVisit(config.minPerVisit || 1);
-    setHeadless(config.headless !== undefined ? config.headless : true);
-    setUseProxies(config.useProxies || false);
-    setSmartAI(config.smartAI !== undefined ? config.smartAI : true);
-    setKeywords(config.keywords || '');
-    setOrganicUrls(config.organicUrls || ['', '', '', '']);
-    setShowConfigModal(false);
-  };
-
-  const deleteConfig = async (configId: string) => {
-    if (!user) return;
-    try {
-      await deleteDoc(doc(db, 'users', user.uid, 'configs', configId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/configs/${configId}`);
-    }
-  };
-
-  useEffect(() => {
-    if (!isAuthReady) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const socket = new WebSocket(`${protocol}//${host}`);
@@ -237,8 +61,7 @@ export default function App() {
       const message = JSON.parse(event.data);
       
       // Only process messages for the current user session
-      if (message.uid && user && message.uid !== user.uid) return;
-      if (message.uid && !user && message.uid !== SESSION_ID) return;
+      if (message.uid && message.uid !== SESSION_ID) return;
 
       if (message.type === 'frame') {
         setScreenshot(message.data);
@@ -263,7 +86,7 @@ export default function App() {
             type: 'ai_decision', 
             requestId: message.requestId, 
             decision: { action: "SCROLL", x: null, y: null, reason: "Quota cooldown active: scrolling to maintain activity." }, 
-            uid: user?.uid || SESSION_ID 
+            uid: SESSION_ID 
           }));
           return;
         }
@@ -350,7 +173,7 @@ export default function App() {
               type: 'ai_decision', 
               requestId: message.requestId, 
               decision: result, 
-              uid: user?.uid || SESSION_ID 
+              uid: SESSION_ID 
             }));
           } catch (err: any) {
             console.error("AI Error:", err);
@@ -371,7 +194,7 @@ export default function App() {
                 socket.send(JSON.stringify({ 
                   type: 'log', 
                   data: `[SYSTEM] Key #${retryCount + 1} quota exhausted. Rotating to Key #${retryCount + 2}...`, 
-                  uid: user?.uid || SESSION_ID 
+                  uid: SESSION_ID 
                 }));
                 return getAIDecision(retryCount + 1);
               } else {
@@ -380,7 +203,7 @@ export default function App() {
                 socket.send(JSON.stringify({ 
                   type: 'log', 
                   data: `[SYSTEM] ALL API keys quota exhausted. Entering 5-minute auto-pilot mode. TIP: Add more Gemini API keys in the settings box to avoid this.`, 
-                  uid: user?.uid || SESSION_ID 
+                  uid: SESSION_ID 
                 }));
                 setTimeout(() => setAiQuotaCooldown(false), 300000); // 5 minute cooldown
                 
@@ -389,7 +212,7 @@ export default function App() {
                   type: 'ai_decision', 
                   requestId: message.requestId, 
                   decision: { action: "SCROLL", x: null, y: null, reason: "AI Quota exhausted: using auto-pilot scroll." }, 
-                  uid: user?.uid || SESSION_ID 
+                  uid: SESSION_ID 
                 }));
               }
             }
@@ -406,7 +229,7 @@ export default function App() {
               type: 'ai_decision', 
               requestId: message.requestId, 
               decision: { action: "SCROLL", x: null, y: null, reason: "AI failed after retries: scrolling as fallback." }, 
-              uid: user?.uid || SESSION_ID 
+              uid: SESSION_ID 
             }));
           }
         };
@@ -425,8 +248,7 @@ export default function App() {
 
   const fetchStatus = async () => {
     try {
-      const uid = user?.uid || SESSION_ID;
-      const res = await fetch(`/api/logs?uid=${uid}`);
+      const res = await fetch(`/api/logs?uid=${SESSION_ID}`);
       if (res.ok) {
         const data = await res.json();
         setIsRunning(data.isRunning);
@@ -463,11 +285,10 @@ export default function App() {
       const proxies = text.split('\n').map(p => p.trim()).filter(p => p.length > 0);
       
       try {
-        const uid = user?.uid || SESSION_ID;
         const res = await fetch('/api/proxies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proxies, uid })
+          body: JSON.stringify({ proxies, uid: SESSION_ID })
         });
         if (res.ok) {
           const data = await res.json();
@@ -490,21 +311,20 @@ export default function App() {
     setCurrentVisit(0);
     setTotalVisits(visits);
     try {
-      const uid = user?.uid || SESSION_ID;
       const res = await fetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
           visits,
-          minPerVisit,
+          waitTime: duration * 60000,
           headless,
           useProxies,
           keywords: enableKeywords ? keywords.split(',').map(k => k.trim()) : [],
           trafficType,
           organicUrls: trafficType === 'organic' ? organicUrls.filter(u => u.trim() !== '') : [],
           smartAI,
-          uid
+          uid: SESSION_ID
         })
       });
       
@@ -522,11 +342,10 @@ export default function App() {
 
   const handleStop = async () => {
     try {
-      const uid = user?.uid || SESSION_ID;
       await fetch('/api/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid })
+        body: JSON.stringify({ uid: SESSION_ID })
       });
       setIsRunning(false);
       setCurrentAction(null);
@@ -543,8 +362,7 @@ export default function App() {
 
   const clearLogs = async () => {
     try {
-      const uid = user?.uid || SESSION_ID;
-    await fetch(`/api/logs?uid=${uid}`, { method: 'DELETE' });
+      await fetch(`/api/logs?uid=${SESSION_ID}`, { method: 'DELETE' });
       setLogs([]);
     } catch (err) {
       console.error('Failed to clear logs:', err);
@@ -623,79 +441,68 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Configuration */}
         <div className="lg:col-span-4 space-y-6">
-            {/* API Key Management Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-indigo-400" />
-                  <h3 className="font-bold text-sm text-white uppercase tracking-wider">Gemini API Keys</h3>
-                </div>
-                {apiKeys.length > 0 && (
-                  <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
-                    {apiKeys.length} Active
-                  </span>
-                )}
+          {/* API Key Management Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-indigo-400" />
+                <h3 className="font-bold text-sm text-white uppercase tracking-wider">Gemini API Keys</h3>
+              </div>
+              {apiKeys.length > 0 && (
+                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                  {apiKeys.length} Active
+                </span>
+              )}
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input 
+                  type="password"
+                  value={newApiKey}
+                  onChange={(e) => setNewApiKey(e.target.value)}
+                  placeholder="Paste API Key here..."
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <button 
+                  onClick={addApiKey}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
               </div>
               
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input 
-                    type="password"
-                    value={newApiKey}
-                    onChange={(e) => setNewApiKey(e.target.value)}
-                    placeholder="Paste API Key here..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (newApiKey.trim()) {
-                        const updated = [...apiKeys, newApiKey.trim()];
-                        setApiKeys(updated);
-                        saveApiKeyToFirestore(updated);
-                        setNewApiKey('');
-                      }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add
-                  </button>
-                </div>
-                
-                <div className="max-h-32 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                  {apiKeys.length === 0 ? (
-                    <div className="text-[10px] text-slate-500 italic text-center py-2">
-                      No custom keys added. Using system default.
-                    </div>
-                  ) : (
-                    apiKeys.map((key, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-slate-950 border border-slate-800/50 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          <span className="text-[10px] text-slate-400 font-mono truncate">
-                            {key.substring(0, 8)}...{key.substring(key.length - 4)}
-                          </span>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            const updated = apiKeys.filter(k => k !== key);
-                            setApiKeys(updated);
-                            saveApiKeyToFirestore(updated);
-                          }}
-                          className="text-slate-500 hover:text-rose-500 transition-colors p-1"
-                          title="Remove Key"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+              <div className="max-h-32 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {apiKeys.length === 0 ? (
+                  <div className="text-[10px] text-slate-500 italic text-center py-2">
+                    No custom keys added. Using system default.
+                  </div>
+                ) : (
+                  apiKeys.map((key, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-slate-950 border border-slate-800/50 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-[10px] text-slate-400 font-mono truncate">
+                          {key.substring(0, 8)}...{key.substring(key.length - 4)}
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
-                <p className="text-[9px] text-slate-500 leading-relaxed">
-                  Add multiple keys to rotate automatically when quota is exceeded. Keys are stored securely in Firestore.
-                </p>
+                      <button 
+                        onClick={() => removeApiKey(key)}
+                        className="text-slate-500 hover:text-rose-500 transition-colors p-1"
+                        title="Remove Key"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
+              <p className="text-[9px] text-slate-500 leading-relaxed">
+                Add multiple keys to rotate automatically when quota is exceeded. Keys are stored locally in your browser.
+              </p>
             </div>
+          </div>
 
           {/* Progress Stats Card (Visible when running) */}
           <AnimatePresence>
@@ -704,24 +511,28 @@ export default function App() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-xl mb-6"
+                className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 shadow-lg shadow-emerald-500/5"
               >
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-emerald-500" />
-                    <h3 className="font-bold text-sm text-white uppercase tracking-widest">
-                      Engine Progress
+                    {currentVisit === totalVisits && totalVisits > 0 ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    ) : (
+                      <Activity className="w-5 h-5 text-emerald-500" />
+                    )}
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                      {currentVisit === totalVisits && totalVisits > 0 ? 'Engine Completed' : 'Engine Progress'}
                     </h3>
                   </div>
-                  <span className="text-[10px] font-black text-slate-950 bg-emerald-500 px-2 py-1 rounded uppercase tracking-tighter">
-                    {totalVisits > 0 ? Math.round((currentVisit / totalVisits) * 100) : 0}%
+                  <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
+                    {Math.round((currentVisit / totalVisits) * 100)}%
                   </span>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/50 relative overflow-hidden">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Completed</div>
-                    <div className="text-3xl font-black text-white">{currentVisit}</div>
+                  <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800 relative overflow-hidden">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</div>
+                    <div className="text-2xl font-black text-white">{currentVisit}</div>
                     <AnimatePresence>
                       {lastCompletedVisit !== null && (
                         <motion.div 
@@ -735,17 +546,17 @@ export default function App() {
                       )}
                     </AnimatePresence>
                   </div>
-                  <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/50">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Remaining</div>
-                    <div className="text-3xl font-black text-slate-400">{totalVisits - currentVisit}</div>
+                  <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remaining</div>
+                    <div className="text-2xl font-black text-slate-400">{totalVisits - currentVisit}</div>
                   </div>
                 </div>
 
-                <div className="mt-6 w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="mt-4 w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-full bg-emerald-500/80 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                    className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
                     initial={{ width: 0 }}
-                    animate={{ width: `${totalVisits > 0 ? (currentVisit / totalVisits) * 100 : 0}%` }}
+                    animate={{ width: `${(currentVisit / totalVisits) * 100}%` }}
                     transition={{ type: "spring", stiffness: 50 }}
                   />
                 </div>
@@ -755,36 +566,15 @@ export default function App() {
 
           {/* Main Config Card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-indigo-400" />
-                <h2 className="font-bold text-sm text-white uppercase tracking-widest">Configuration</h2>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setShowConfigModal(true)}
-                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-                  title="Saved Configs"
-                >
-                  <FolderOpen className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => {
-                    const name = window.prompt("Enter a name for this configuration:");
-                    if (name) saveConfig(name);
-                  }}
-                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-                  title="Save Current Config"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-              </div>
+            <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-indigo-400" />
+              <h2 className="font-semibold text-sm text-white">Configuration</h2>
             </div>
             
-            <div className="p-5 space-y-6">
+            <div className="p-5 space-y-5">
               {/* URL Input */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Target URL</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Target URL</label>
                 <div className="relative group">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                   <input
@@ -793,19 +583,19 @@ export default function App() {
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://example.com"
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
                   />
                 </div>
               </div>
 
               {/* Traffic Control */}
               <div className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Traffic Mode</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Traffic Mode</label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800">
                   <button
                     onClick={() => setTrafficType('direct')}
                     disabled={isRunning}
-                    className={`py-2.5 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    className={`py-2 px-4 rounded-lg text-xs font-medium transition-all ${
                       trafficType === 'direct' 
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
                         : 'text-slate-500 hover:text-slate-300'
@@ -816,7 +606,7 @@ export default function App() {
                   <button
                     onClick={() => setTrafficType('organic')}
                     disabled={isRunning}
-                    className={`py-2.5 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    className={`py-2 px-4 rounded-lg text-xs font-medium transition-all ${
                       trafficType === 'organic' 
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
                         : 'text-slate-500 hover:text-slate-300'
@@ -849,129 +639,150 @@ export default function App() {
                             disabled={isRunning}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-all"
                           />
+                          <p className="text-[10px] text-indigo-400/70 italic">* Bot will search for these on Google to find your site</p>
                         </div>
                       )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Referral URLs (Optional)</label>
+                      <div className="space-y-2">
+                        {organicUrls.map((u, idx) => (
+                          <input
+                            key={idx}
+                            type="url"
+                            value={u}
+                            onChange={(e) => {
+                              const newUrls = [...organicUrls];
+                              newUrls[idx] = e.target.value;
+                              setOrganicUrls(newUrls);
+                            }}
+                            placeholder={`Referrer URL ${idx + 1}`}
+                            disabled={isRunning}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-all"
+                          />
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-indigo-400/70 italic">* Bot will visit these URLs randomly to simulate organic referral traffic</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Visits & Min Per Visit */}
+              {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">VISITS</label>
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Visits</label>
                   <input
                     type="number"
                     value={visits}
-                    onChange={(e) => setVisits(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setVisits(parseInt(e.target.value) || 1)}
+                    min="1"
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-indigo-500 transition-all"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MIN PER VISIT</label>
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Min Per Visit</label>
                   <input
                     type="number"
-                    value={minPerVisit}
-                    onChange={(e) => setMinPerVisit(parseInt(e.target.value) || 0)}
+                    value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value) || 1)}
+                    min="1"
                     disabled={isRunning}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-indigo-500 transition-all"
                   />
                 </div>
               </div>
 
               {/* Toggles */}
               <div className="space-y-3 pt-2">
-                <div 
-                  onClick={() => !isRunning && setSmartAI(!smartAI)}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                    smartAI ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
-                  }`}
-                >
+                <label className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:bg-slate-900/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <Activity className={`w-4 h-4 ${smartAI ? 'text-indigo-400' : 'text-slate-500'}`} />
-                    <span className={`text-xs font-bold uppercase tracking-wider ${smartAI ? 'text-white' : 'text-slate-500'}`}>Smart AI Behavior</span>
+                    <Activity className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-slate-300">Smart AI Behavior</span>
                   </div>
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${smartAI ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
-                    {smartAI && <CheckCircle2 className="w-3 h-3 text-white" />}
-                  </div>
-                </div>
+                  <input
+                    type="checkbox"
+                    checked={smartAI}
+                    onChange={(e) => setSmartAI(e.target.checked)}
+                    disabled={isRunning}
+                    className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
+                  />
+                </label>
 
-                <div 
-                  onClick={() => !isRunning && setHeadless(!headless)}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                    headless ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
-                  }`}
-                >
+                <label className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:bg-slate-900/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <Terminal className={`w-4 h-4 ${headless ? 'text-indigo-400' : 'text-slate-500'}`} />
-                    <span className={`text-xs font-bold uppercase tracking-wider ${headless ? 'text-white' : 'text-slate-500'}`}>Headless Mode</span>
+                    <Terminal className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-slate-300">Headless Mode</span>
                   </div>
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${headless ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
-                    {headless && <CheckCircle2 className="w-3 h-3 text-white" />}
-                  </div>
-                </div>
+                  <input
+                    type="checkbox"
+                    checked={headless}
+                    onChange={(e) => setHeadless(e.target.checked)}
+                    disabled={isRunning}
+                    className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
+                  />
+                </label>
+              </div>
 
-                <div className="space-y-3">
-                  <div 
-                    onClick={() => !isRunning && setUseProxies(!useProxies)}
-                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                      useProxies ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'
-                    }`}
+              {/* Proxy Section */}
+              <div className="pt-2">
+                <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-indigo-400" />
+                      <span className="text-sm font-semibold text-indigo-100">Proxy Management</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={useProxies}
+                      onChange={(e) => setUseProxies(e.target.checked)}
+                      disabled={isRunning}
+                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isRunning}
+                    className="w-full py-2 px-4 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-xs font-medium text-indigo-400 hover:bg-indigo-600/20 transition-all flex items-center justify-center gap-2"
                   >
-                    <div className="flex items-center gap-3">
-                      <Globe className={`w-4 h-4 ${useProxies ? 'text-indigo-400' : 'text-slate-500'}`} />
-                      <span className={`text-xs font-bold uppercase tracking-wider ${useProxies ? 'text-white' : 'text-slate-500'}`}>Proxy Management</span>
-                    </div>
-                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${useProxies ? 'bg-indigo-600 border-indigo-500' : 'bg-slate-900 border-slate-700'}`}>
-                      {useProxies && <CheckCircle2 className="w-3 h-3 text-white" />}
-                    </div>
-                  </div>
-
-                  {useProxies && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl"
-                    >
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold py-3 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all"
-                      >
-                        Upload Proxy List (.txt)
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleProxyUpload}
-                        accept=".txt"
-                        className="hidden"
-                      />
-                      <p className="text-[9px] text-slate-500 text-center uppercase tracking-widest">Format: IP:PORT:USER:PASS or IP:PORT</p>
-                    </motion.div>
-                  )}
+                    Upload Proxy List (.txt)
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleProxyUpload}
+                    accept=".txt"
+                    className="hidden"
+                  />
+                  <p className="text-[10px] text-indigo-400/60 text-center">Format: IP:PORT:USER:PASS or IP:PORT</p>
                 </div>
               </div>
 
               {/* Action Button */}
               <div className="pt-4">
-                {isRunning ? (
-                  <button
-                    onClick={handleStop}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-black py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-rose-600/20 uppercase tracking-widest"
-                  >
-                    <Square className="w-5 h-5 fill-white" />
-                    Stop Engine
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleStart}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest"
-                  >
-                    <Play className="w-5 h-5 fill-white" />
-                    Start Engine
-                  </button>
-                )}
+                <button
+                  onClick={isRunning ? handleStop : handleStart}
+                  className={`w-full py-4 rounded-xl font-bold text-sm tracking-wide transition-all flex items-center justify-center gap-3 shadow-lg ${
+                    isRunning 
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20' 
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
+                  }`}
+                >
+                  {isRunning ? (
+                    <>
+                      <Square className="w-4 h-4 fill-current" />
+                      STOP ENGINE
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-current" />
+                      START ENGINE
+                    </>
+                  )}
+                </button>
                 {error && (
                   <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-400 text-xs">
                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -990,7 +801,7 @@ export default function App() {
             <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-400" />
-                <h2 className="font-bold text-sm text-white uppercase tracking-widest">Live Browser Feed</h2>
+                <h2 className="font-semibold text-sm text-white">Live Browser Feed</h2>
               </div>
               <div className="flex items-center gap-3">
                 {aiQuotaCooldown && (
@@ -1061,14 +872,14 @@ export default function App() {
             <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-indigo-400" />
-                <h2 className="font-bold text-sm text-white uppercase tracking-widest">System Console</h2>
+                <h2 className="font-semibold text-sm text-white">System Console</h2>
               </div>
               <div className="flex items-center gap-2">
                 <button 
                   onClick={clearLogs}
-                  className="text-[10px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-colors"
+                  className="text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase tracking-wider transition-colors"
                 >
-                  CLEAR LOGS
+                  Clear Logs
                 </button>
               </div>
             </div>
@@ -1135,64 +946,6 @@ export default function App() {
           </p>
         </div>
       </footer>
-
-      {/* Config Modal */}
-      <AnimatePresence>
-        {showConfigModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
-            >
-              <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">Saved Configurations</h3>
-                <button 
-                  onClick={() => setShowConfigModal(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  <Square className="w-5 h-5 rotate-45" />
-                </button>
-              </div>
-              <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 custom-scrollbar">
-                {savedConfigs.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>No saved configurations found.</p>
-                  </div>
-                ) : (
-                  savedConfigs.map((config) => (
-                    <div 
-                      key={config.id}
-                      className="group bg-slate-800/50 border border-slate-700 rounded-xl p-4 flex items-center justify-between hover:border-indigo-500/50 transition-all"
-                    >
-                      <div className="flex-1 cursor-pointer" onClick={() => loadConfig(config)}>
-                        <h4 className="font-bold text-white group-hover:text-indigo-400 transition-colors">{config.name}</h4>
-                        <p className="text-xs text-slate-400 truncate max-w-[250px]">{config.url}</p>
-                        <div className="flex gap-2 mt-2">
-                          <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 rounded text-slate-300 uppercase">{config.trafficType}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 rounded text-slate-300">{config.visits} visits</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          if (window.confirm("Delete this configuration?")) {
-                            deleteConfig(config.id);
-                          }
-                        }}
-                        className="p-2 text-slate-500 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

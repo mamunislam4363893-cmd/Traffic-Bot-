@@ -1,188 +1,45 @@
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: /users/{userId}
-// Document ID: userId (Firebase Auth UID)
-// Fields:
-//   - apiKeys: array of strings (required) - Gemini API keys
-//   - updatedAt: timestamp (optional) - Last update time
-//
-// Collection: /users/{userId}/configs/{configId}
-// Document ID: configId (auto-generated)
-// Fields:
-//   - name: string (required) - Name of the config
-//   - url: string (required) - Target URL
-//   - trafficType: string (required, enum: ['direct', 'organic']) - Type of traffic
-//   - visits: number (required) - Number of visits
-//   - duration: number (optional) - Duration in minutes
-//   - headless: boolean (optional) - Headless mode
-//   - useProxies: boolean (optional) - Use proxies
-//   - smartAI: boolean (optional) - Use smart AI
-//   - keywords: string (optional) - Keywords for organic search
-//   - organicUrls: array of strings (optional) - Other URLs for organic search
-//   - createdAt: timestamp (optional) - Creation time
-//
-// Collection: /users/{userId}/sessions/{sessionId}
-// Document ID: sessionId (auto-generated)
-// Fields:
-//   - status: string (required, enum: ['running', 'completed', 'stopped', 'error']) - Session status
-//   - currentVisit: number (required) - Current visit count
-//   - totalVisits: number (required) - Total visit count
-//   - startTime: timestamp (required) - Session start time
-//   - endTime: timestamp (optional) - Session end time
-//   - config: map (optional) - Snapshot of the config used
-//
-// Collection: /users/{userId}/sessions/{sessionId}/logs/{logId}
-// Document ID: logId (auto-generated)
-// Fields:
-//   - timestamp: timestamp (required) - Log time
-//   - message: string (required) - Log message
-//   - type: string (optional, enum: ['info', 'warning', 'error', 'success']) - Log type
-//
-// ===============================================================
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ===============================================================
     // Helper Functions
-    // ===============================================================
-
     function isAuthenticated() {
       return request.auth != null;
     }
-
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-
-    function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "riadalmamun4060@gmail.com" && request.auth.token.email_verified == true));
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
     }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
     }
-
-    function isValidUrl(url) {
-      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-
-    function isValidUser(data) {
-      return hasRequiredFields(['apiKeys']) &&
-             data.apiKeys is list &&
-             data.apiKeys.size() <= 10 &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
-    }
-
-    function isValidConfig(data) {
-      return hasRequiredFields(['name', 'url', 'trafficType', 'visits']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             isValidUrl(data.url) &&
-             data.trafficType in ['direct', 'organic'] &&
-             data.visits is number && data.visits > 0 && data.visits <= 1000 &&
-             (!('duration' in data) || (data.duration is number && data.duration > 0)) &&
-             (!('headless' in data) || data.headless is bool) &&
-             (!('useProxies' in data) || data.useProxies is bool) &&
-             (!('smartAI' in data) || data.smartAI is bool) &&
-             (!('keywords' in data) || (data.keywords is string && data.keywords.size() <= 500)) &&
-             (!('organicUrls' in data) || (data.organicUrls is list && data.organicUrls.size() <= 20)) &&
-             (!('createdAt' in data) || data.createdAt is timestamp);
-    }
-
     function isValidSession(data) {
-      return hasRequiredFields(['status', 'currentVisit', 'totalVisits', 'startTime']) &&
-             data.status in ['running', 'completed', 'stopped', 'error'] &&
-             data.currentVisit is number && data.currentVisit >= 0 &&
-             data.totalVisits is number && data.totalVisits > 0 &&
-             data.startTime is timestamp &&
-             (!('endTime' in data) || data.endTime is timestamp) &&
-             (!('config' in data) || data.config is map);
+      return data.uid is string && data.uid.size() > 0 &&
+             data.isRunning is bool &&
+             (!('url' in data) || data.url is string) &&
+             (!('visits' in data) || data.age is number) &&
+             (!('proxyCount' in data) || data.proxyCount is number) &&
+             (!('screenshot' in data) || data.screenshot is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
     }
-
     function isValidLog(data) {
-      return hasRequiredFields(['timestamp', 'message']) &&
-             data.timestamp is timestamp &&
-             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
-             (!('type' in data) || data.type in ['info', 'warning', 'error', 'success']);
+      return data.uid is string && data.uid.size() > 0 &&
+             data.message is string && data.message.size() < 1000 &&
+             data.timestamp is string;
     }
 
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
-      allow delete: if isAdmin();
-
-      match /configs/{configId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidConfig(request.resource.data);
-        allow update: if isOwner(userId) && isValidConfig(request.resource.data);
-        allow delete: if isOwner(userId) || isAdmin();
-      }
-
-      match /sessions/{sessionId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidSession(request.resource.data);
-        allow update: if isOwner(userId) && isValidSession(request.resource.data);
-        allow delete: if isOwner(userId) || isAdmin();
-
-        match /logs/{logId} {
-          allow read: if isOwner(userId) || isAdmin();
-          allow create: if isOwner(userId) && isValidLog(request.resource.data);
-          allow update: if isOwner(userId) && isValidLog(request.resource.data);
-          allow delete: if isOwner(userId) || isAdmin();
-        }
-      }
+    // Sessions: Users can only read/write their own session document
+    match /sessions/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidSession(request.resource.data) && uidUnchanged();
     }
 
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
+    // Logs: Users can only read/write their own logs
+    match /logs/{logId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidLog(request.resource.data) && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
   }
 }
-
-// ===============================================================
-// Devil's Advocate Attack Documentation
-// ===============================================================
-// 1. Public List Exploit: FAILED. Default deny rules prevent unauthenticated access.
-// 2. Unauthorized Read/Write: FAILED. Rules strictly check isOwner(userId) or isAdmin().
-// 3. The "Update Bypass": FAILED. update rules call isValidX() functions.
-// 4. Ownership Hijacking (Create): FAILED. create rules check isOwner(userId) which matches request.auth.uid to the path.
-// 5. Ownership Hijacking (Update): FAILED. update rules check isOwner(userId).
-// 6. Immutable Field Modification: PARTIAL. Most fields are validated, but specific immutable checks (like createdAt) could be added for more hardening.
-// 7. Data Corruption (Type Juggling): FAILED. isValidX() functions check types (is string, is number, etc.).
-// 8. Resource Exhaustion / DoS: FAILED. Size checks are implemented for strings and lists (e.g., message.size() <= 5000).
-// 9. Required Field Omission: FAILED. hasRequiredFields() checks for mandatory fields.
-// 10. Privilege Escalation: FAILED. isAdmin() checks for a specific email or a 'role' field that users cannot set themselves (no rule allows setting 'role').
-// 11. Schema Pollution: FAILED. hasOnlyAllowedFields() could be added for stricter enforcement, but isValidX() covers known fields.
-// 12. Invalid State Transition: FAILED. status is checked against an enum.
-// 13. Path Traversal / Scoping Attack: FAILED. Rules are scoped to /users/{userId}.
-// 14. Timestamp Manipulation: FAILED. Timestamps are checked for type.
-// 15. Negative Value / Overflow: FAILED. visits and currentVisit are checked for range (> 0 or >= 0).
-// 16. The "Mixed Content" Leak: FAILED. Users can only read their own documents.
-// 17. Counter/Action Replay: N/A. No counters used in this model.
-// 18. Orphaned Subcollection Access: FAILED. Rules require isOwner(userId) for subcollections.
-// 19. Query Mismatch: N/A. Standard queries should work.
-// 20. Validator Pattern Check: PASSED. All write rules call domain validators.
-// ===============================================================
