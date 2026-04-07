@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User settings and profile",
+      "type": "object",
+      "properties": {
+        "apiKeys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of Gemini API keys"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["apiKeys"]
+    },
+    "BotConfig": {
+      "title": "Bot Configuration",
+      "description": "Saved settings for a traffic bot run",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "trafficType": { "type": "string", "enum": ["direct", "organic"] },
+        "visits": { "type": "number" },
+        "duration": { "type": "number" },
+        "headless": { "type": "boolean" },
+        "useProxies": { "type": "boolean" },
+        "smartAI": { "type": "boolean" },
+        "keywords": { "type": "string" },
+        "organicUrls": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "url", "trafficType", "visits"]
+    },
+    "BotSession": {
+      "title": "Bot Session",
+      "description": "Execution state of a bot run",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["running", "completed", "stopped", "error"] },
+        "currentVisit": { "type": "number" },
+        "totalVisits": { "type": "number" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "config": { "$ref": "BotConfig" }
+      },
+      "required": ["status", "currentVisit", "totalVisits", "startTime"]
+    },
+    "LogEntry": {
+      "title": "Log Entry",
+      "description": "A single log message from the bot",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "error", "success"] }
+      },
+      "required": ["timestamp", "message"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and settings"
+    },
+    "/users/{userId}/configs/{configId}": {
+      "schema": "BotConfig",
+      "description": "Saved bot configurations"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "BotSession",
+      "description": "Bot execution sessions"
+    },
+    "/users/{userId}/sessions/{sessionId}/logs/{logId}": {
+      "schema": "LogEntry",
+      "description": "Logs for a specific session"
+    }
+  }
+}
