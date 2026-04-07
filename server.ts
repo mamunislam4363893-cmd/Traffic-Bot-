@@ -264,7 +264,7 @@ async function startServer() {
           try {
             addLog(uid, "Initializing browser engine...");
             session.browser = await puppeteer.launch({
-              headless: true,
+              headless: headless === true || headless === 'true',
               args: [
                 ...launchArgs,
                 `--window-size=${randomViewport.width},${randomViewport.height}`,
@@ -695,15 +695,12 @@ async function startServer() {
           session.currentScreenshot = null;
           broadcastFrame(uid, '', randomViewport.width, randomViewport.height);
           const interVisitDelay = 3000 + Math.random() * 5000;
-          addLog(uid, `Success: Visit #${i + 1}/${visits} completed successfully!`);
           broadcastProgress(uid, i + 1, visits); // Update progress after completion
-          addLog(uid, `Waiting ${Math.round(interVisitDelay/1000)}s before next visit...`);
           await new Promise(r => setTimeout(r, interVisitDelay)); 
         }
       } catch (err: any) {
         addLog(uid, `Error: ${err.message}`);
       } finally {
-        addLog(uid, `Success: All ${visits} visits completed successfully!`);
         session.isRunning = false;
         session.currentScreenshot = null;
         if (session.browser) {

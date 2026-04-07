@@ -704,28 +704,24 @@ export default function App() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 shadow-lg shadow-emerald-500/5"
+                className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 shadow-xl mb-6"
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
-                    {currentVisit === totalVisits && totalVisits > 0 ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                    ) : (
-                      <Activity className="w-5 h-5 text-emerald-500" />
-                    )}
-                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-                      {currentVisit === totalVisits && totalVisits > 0 ? 'Engine Completed' : 'Engine Progress'}
+                    <Activity className="w-5 h-5 text-emerald-500" />
+                    <h3 className="font-bold text-sm text-white uppercase tracking-widest">
+                      Engine Progress
                     </h3>
                   </div>
-                  <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
-                    {Math.round((currentVisit / totalVisits) * 100)}%
+                  <span className="text-[10px] font-black text-slate-950 bg-emerald-500 px-2 py-1 rounded uppercase tracking-tighter">
+                    {totalVisits > 0 ? Math.round((currentVisit / totalVisits) * 100) : 0}%
                   </span>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800 relative overflow-hidden">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</div>
-                    <div className="text-2xl font-black text-white">{currentVisit}</div>
+                  <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/50 relative overflow-hidden">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Completed</div>
+                    <div className="text-3xl font-black text-white">{currentVisit}</div>
                     <AnimatePresence>
                       {lastCompletedVisit !== null && (
                         <motion.div 
@@ -739,17 +735,17 @@ export default function App() {
                       )}
                     </AnimatePresence>
                   </div>
-                  <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remaining</div>
-                    <div className="text-2xl font-black text-slate-400">{totalVisits - currentVisit}</div>
+                  <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/50">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Remaining</div>
+                    <div className="text-3xl font-black text-slate-400">{totalVisits - currentVisit}</div>
                   </div>
                 </div>
 
-                <div className="mt-4 w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className="mt-6 w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <motion.div 
-                    className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                    className="h-full bg-emerald-500/80 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                     initial={{ width: 0 }}
-                    animate={{ width: `${(currentVisit / totalVisits) * 100}%` }}
+                    animate={{ width: `${totalVisits > 0 ? (currentVisit / totalVisits) * 100 : 0}%` }}
                     transition={{ type: "spring", stiffness: 50 }}
                   />
                 </div>
@@ -762,7 +758,7 @@ export default function App() {
             <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-indigo-400" />
-                <h2 className="font-semibold text-sm text-white">Configuration</h2>
+                <h2 className="font-bold text-sm text-white uppercase tracking-widest">Configuration</h2>
               </div>
               <div className="flex gap-2">
                 <button 
@@ -863,7 +859,7 @@ export default function App() {
               {/* Visits & Min Per Visit */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Visits</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">VISITS</label>
                   <input
                     type="number"
                     value={visits}
@@ -873,7 +869,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Min Per Visit</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MIN PER VISIT</label>
                   <input
                     type="number"
                     value={minPerVisit}
@@ -994,7 +990,7 @@ export default function App() {
             <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-400" />
-                <h2 className="font-semibold text-sm text-white">Live Browser Feed</h2>
+                <h2 className="font-bold text-sm text-white uppercase tracking-widest">Live Browser Feed</h2>
               </div>
               <div className="flex items-center gap-3">
                 {aiQuotaCooldown && (
@@ -1065,14 +1061,14 @@ export default function App() {
             <div className="p-4 border-b border-slate-800 bg-slate-800/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-indigo-400" />
-                <h2 className="font-semibold text-sm text-white">System Console</h2>
+                <h2 className="font-bold text-sm text-white uppercase tracking-widest">System Console</h2>
               </div>
               <div className="flex items-center gap-2">
                 <button 
                   onClick={clearLogs}
-                  className="text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase tracking-wider transition-colors"
+                  className="text-[10px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-colors"
                 >
-                  Clear Logs
+                  CLEAR LOGS
                 </button>
               </div>
             </div>
